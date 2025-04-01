@@ -12,16 +12,32 @@ retry
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"math"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"time"
 )
 
 var retries = flag.Int("t", 40, "how many times to retry.")
+var fixed_interval = flag.Int("interval", 0, "use a fixed interval between retries (default mode is log2 backoff)")
+var interval_unit = flag.String("unit", "seconds", "interval unit (required --interval)")
+var verbose = flag.Bool("verbose", false, "verbose output")
+var attempts int = 1
+var rwlock = sync.RWMutex{}
 
+func updateSpew(arguments string) {
+	for {
+		rwlock.RLock()
+		log.Printf("retry: %s has %d retries remaining...\n", arguments, *retries-attempts)
+		rwlock.RUnlock()
+		time.Sleep(time.Duration(30) * time.Second)
+	}
+
+}
 func main() {
 	flag.Parse()
 
@@ -29,21 +45,69 @@ func main() {
 		log.Println("found no arguments for a program to run. Exiting...")
 		os.Exit(1)
 	}
-	backoff := 100
+	var interval_multiplier int
+	switch *interval_unit {
+	case "h":
+		{
+			interval_multiplier = 60000
+		}
+	case "s":
+		{
+			interval_multiplier = 1000
+		}
+	case "ms":
+		{
+			interval_multiplier = 100
+		}
+	default:
+		{
+			// assume seconds
+			interval_multiplier = 1000
+		}
+	}
+	var errorsSeen = make(map[string]int)
+	var interval int
+	if *fixed_interval > 0 {
+		interval = *fixed_interval * interval_multiplier
+	} else {
+		interval = 100 // start at 100ms for backoff version
+	}
+	command := strings.Join(flag.Args(), " ")
+	go updateSpew(command)
 	for i := 2; i < *retries+2; i++ {
-		var cmd = exec.Command(flag.Arg(0), flag.Args()[1:]...)
+		var cmd = exec.Command(flag.Arg(0), flag.Args()...)
 		output, err := cmd.CombinedOutput()
 		if err == nil {
 			log.Printf("%s\n", output)
 			os.Exit(0)
 		}
 		// otherwise, there was a problem.
-		backoff *= int(math.Log2(float64(i)))
-		log.Printf("Error %s, retrying after %.2e milliseconds. Output:\n", err.Error(), float64(backoff)*1000)
-		log.Printf("%s\n", output)
-		time.Sleep(time.Millisecond * time.Duration(backoff))
+		if *fixed_interval > 0 {
+			// interval doesn't change :)
+		} else {
+			interval *= int(math.Log2(float64(i)))
+		}
+		strOutput := fmt.Sprint(output)
+		hasOutput := strings.TrimSpace(strOutput) == ""
+		_, seen := errorsSeen[strOutput]
+		logOutput := ""
+		if *verbose {
+			logOutput += fmt.Sprintf("retry: Error %s, retrying after %.2e seconds.\n", err.Error(), time.Duration(interval).Seconds())
+		}
+		if !seen && hasOutput {
+			errorsSeen[strOutput] = 1
+			logOutput += fmt.Sprintf("retry: %s has new output:\n%s\n", command, output)
+		}
+		if logOutput != "" {
+			log.Print(logOutput)
+		}
+		rwlock.Lock()
+		attempts += 1
+		rwlock.Unlock()
+
+		time.Sleep(time.Millisecond * time.Duration(interval))
 	}
-	log.Printf("Process retry attempts failed for %s\n", strings.Join(flag.Args(), ","))
+	log.Printf("retry: %d attempts failed for %s\n", *retries, strings.Join(flag.Args(), ","))
 	os.Exit(1)
 	//os.StartProcess()
 }
