@@ -26,6 +26,7 @@ var retries = flag.Int("t", 40, "how many times to retry.")
 var fixed_interval = flag.Int("interval", 0, "use a fixed interval between retries (default mode is log2 backoff)")
 var interval_unit = flag.String("unit", "seconds", "interval unit (required --interval)")
 var verbose = flag.Bool("verbose", false, "verbose output")
+var identifier = flag.String("id", "", "log identifier (default is the retry command and args)")
 var attempts int = 1
 var rwlock = sync.RWMutex{}
 
@@ -34,11 +35,12 @@ func updateSpew(arguments string) {
 		rwlock.RLock()
 		log.Printf("retry: %s has %d retries remaining...\n", arguments, *retries-attempts)
 		rwlock.RUnlock()
-		time.Sleep(time.Duration(30) * time.Second)
+		time.Sleep(time.Duration(300) * time.Second)
 	}
 
 }
 func main() {
+
 	flag.Parse()
 
 	if len(flag.Args()) <= 0 {
@@ -72,10 +74,15 @@ func main() {
 	} else {
 		interval = 100 // start at 100ms for backoff version
 	}
-	command := strings.Join(flag.Args(), " ")
-	go updateSpew(command)
+	var logID string
+	if *identifier == "" {
+		logID = strings.Join(flag.Args(), " ")
+	} else {
+		logID = "id '" + *identifier + "'"
+	}
+	go updateSpew(logID)
 	for i := 2; i < *retries+2; i++ {
-		var cmd = exec.Command(flag.Arg(0), flag.Args()...)
+		var cmd = exec.Command(flag.Arg(0), flag.Args()[1:]...)
 		output, err := cmd.CombinedOutput()
 		if err == nil {
 			log.Printf("%s\n", output)
@@ -96,7 +103,7 @@ func main() {
 		}
 		if !seen && hasOutput {
 			errorsSeen[strOutput] = 1
-			logOutput += fmt.Sprintf("retry: %s has new output:\n%s\n", command, output)
+			logOutput += fmt.Sprintf("retry: %s has new output:\n%s\n", logID, output)
 		}
 		if logOutput != "" {
 			log.Print(logOutput)
