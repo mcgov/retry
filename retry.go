@@ -33,7 +33,7 @@ var rwlock = sync.RWMutex{}
 func updateSpew(arguments string) {
 	for {
 		rwlock.RLock()
-		log.Printf("retry: %s has %d retries remaining...\n", arguments, *retries-attempts)
+		os.Stderr.WriteString(fmt.Sprintf("retry: %s has %d retries remaining...\n", arguments, *retries-attempts))
 		rwlock.RUnlock()
 		time.Sleep(time.Duration(300) * time.Second)
 	}
@@ -85,7 +85,7 @@ func main() {
 		var cmd = exec.Command(flag.Arg(0), flag.Args()[1:]...)
 		output, err := cmd.CombinedOutput()
 		if err == nil {
-			log.Printf("%s\n", output)
+			os.Stdout.WriteString(fmt.Sprintf("%s\n", output))
 			os.Exit(0)
 		}
 		// otherwise, there was a problem.
@@ -106,7 +106,7 @@ func main() {
 			logOutput += fmt.Sprintf("retry: %s has new output:\n%s\n", logID, output)
 		}
 		if logOutput != "" {
-			log.Print(logOutput)
+			os.Stderr.WriteString(logOutput)
 		}
 		rwlock.Lock()
 		attempts += 1
