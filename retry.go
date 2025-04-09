@@ -5,7 +5,7 @@ retry
 	a dumb application for dumb problems.
 
 	Retries a command until that program exits with a success code.
-	Absolutely no handling of state. Be careful.
+	Absolutely no handling of any other state. Be careful.
 	Retries have a backoff of (last_wait * log2(retry_i).
 	Larger values of -t may wait for a long time.
 */
@@ -116,5 +116,4 @@ func main() {
 	}
 	log.Printf("retry: %d attempts failed for %s\n", *retries, strings.Join(flag.Args(), ","))
 	os.Exit(1)
-	//os.StartProcess()
 }
