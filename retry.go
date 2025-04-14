@@ -13,7 +13,6 @@ retry
 import (
 	"flag"
 	"fmt"
-	"log"
 	"math"
 	"os"
 	"os/exec"
@@ -37,14 +36,13 @@ func updateSpew(arguments string) {
 		rwlock.RUnlock()
 		time.Sleep(time.Duration(300) * time.Second)
 	}
-
 }
 func main() {
 
 	flag.Parse()
 
 	if len(flag.Args()) <= 0 {
-		log.Println("found no arguments for a program to run. Exiting...")
+		os.Stderr.WriteString("found no arguments for a program to run. Exiting...\n")
 		os.Exit(1)
 	}
 	var interval_multiplier int
@@ -114,6 +112,6 @@ func main() {
 
 		time.Sleep(time.Millisecond * time.Duration(interval))
 	}
-	log.Printf("retry: %d attempts failed for %s\n", *retries, strings.Join(flag.Args(), ","))
+	os.Stderr.WriteString(fmt.Sprintf("retry: %d attempts failed for %s\n", *retries, strings.Join(flag.Args(), ",")))
 	os.Exit(1)
 }
